@@ -180,8 +180,25 @@ module Default = struct
     type_constr_conv longident ~loc ~f []
 
   let eta_reduce =
+    (* Erasable attributes are those that can be removed without affecting
+       the resulting program. When eta-reducing, it's fine to consider an
+       attribute list as empty if it contains only erasable attributes.
+    *)
+    let module Reserved_namespaces = Name.Reserved_namespaces.Instance in
+    let erasable_attributes = Reserved_namespaces.create () in
+    Reserved_namespaces.reserve erasable_attributes "jane.erasable";
+    let remove_erasable_attributes expr =
+      {
+        expr with
+        pexp_attributes =
+          List.filter expr.pexp_attributes ~f:(fun attr ->
+              not
+                (Reserved_namespaces.is_in_reserved_namespaces
+                   erasable_attributes attr.attr_name.txt));
+      }
+    in
     let rec gather_params acc expr =
-      match expr with
+      match remove_erasable_attributes expr with
       | {
        pexp_desc =
          Pexp_fun (label, None (* no default expression *), subpat, body);
@@ -233,7 +250,7 @@ module Default = struct
     let rec gather_args n x =
       if n = 0 then Some (x, [])
       else
-        match x with
+        match remove_erasable_attributes x with
         | {
          pexp_desc = Pexp_apply (body, args);
          pexp_attributes = [];

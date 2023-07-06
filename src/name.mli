@@ -112,6 +112,22 @@ module Reserved_namespaces : sig
       N.B. the "merlin" namespace is reserved by default. *)
 
   val is_in_reserved_namespaces : string -> bool
+
+  module Instance : sig
+    (** A local instance of [Reserved_namespaces] instead of the global
+        singleton. *)
+
+    type t
+
+    val create : unit -> t
+
+    val reserve : t -> string -> unit
+    (** {!Reserved_namespaces.reserve}, but operating over a local instance. *)
+
+    val is_in_reserved_namespaces : t -> string -> bool
+    (** {!Reserved_namespaces.is_in_reserved_namespaces}, but operating over a
+        local instance. *)
+  end
 end
 
 val ignore_checks : string -> bool

@@ -119,9 +119,6 @@ module Allowlisted = struct
 end
 
 module Reserved_namespaces = struct
-  type reserved = (string, sub_namespaces) Hashtbl.t
-  and sub_namespaces = All | Sub_namespaces of reserved
-
   (* If [tbl] contains a mapping from "x" to [All], then "x" and all paths that
    * start with "x." are reserved with respect to [tbl]
    *
@@ -129,35 +126,42 @@ module Reserved_namespaces = struct
    * reserved with respect to [tbl'], then all paths "x.P" are reserved with
    * respect to [tbl].
    *)
-  let create_reserved () : reserved = Hashtbl.create 16
+  module Instance = struct
+    type t = (string, sub_namespaces) Hashtbl.t
+    and sub_namespaces = All | Sub_namespaces of t
 
-  let rec reserve ns tbl =
-    match split_outer_namespace ns with
-    | None -> Hashtbl.add_exn tbl ~key:ns ~data:All
-    | Some (outer_ns, rest_ns) -> (
-        match
-          Hashtbl.find_or_add tbl outer_ns ~default:(fun () ->
-              Sub_namespaces (create_reserved ()))
-        with
-        | Sub_namespaces rest_tbl -> reserve rest_ns rest_tbl
-        | All -> ())
+    let create () : t = Hashtbl.create 16
 
-  let rec is_in_reserved_namespaces name tbl =
-    match split_outer_namespace name with
-    | Some (ns, rest) -> (
-        match Hashtbl.find_opt tbl ns with
-        | Some (Sub_namespaces rest_tbl) ->
-            is_in_reserved_namespaces rest rest_tbl
-        | Some All -> true
-        | None -> false)
-    | None -> (
-        match Hashtbl.find_opt tbl name with
-        | Some All -> true
-        | Some (Sub_namespaces _) | None -> false)
+    let rec reserve t ns =
+      match split_outer_namespace ns with
+      | None -> Hashtbl.add_exn t ~key:ns ~data:All
+      | Some (outer_ns, rest_ns) -> (
+          match
+            Hashtbl.find_or_add t outer_ns ~default:(fun () ->
+                Sub_namespaces (create ()))
+          with
+          | Sub_namespaces rest -> reserve rest rest_ns
+          | All -> ())
 
-  let tbl = create_reserved ()
-  let reserve ns = reserve ns tbl
-  let is_in_reserved_namespaces name = is_in_reserved_namespaces name tbl
+    let rec is_in_reserved_namespaces t name =
+      match split_outer_namespace name with
+      | Some (ns, rest_ns) -> (
+          match Hashtbl.find_opt t ns with
+          | Some (Sub_namespaces rest) -> is_in_reserved_namespaces rest rest_ns
+          | Some All -> true
+          | None -> false)
+      | None -> (
+          match Hashtbl.find_opt t name with
+          | Some All -> true
+          | Some (Sub_namespaces _) | None -> false)
+  end
+
+  let tbl = Instance.create ()
+  let reserve ns = Instance.reserve tbl ns
+
+  let is_in_reserved_namespaces name =
+    Instance.is_in_reserved_namespaces tbl name
+
   let () = reserve "merlin"
   let () = reserve "reason"
   let () = reserve "refmt" (* reason *)
