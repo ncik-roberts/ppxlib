@@ -192,3 +192,60 @@ let x = (42 [@baz.qux3])
 Line _, characters 14-22:
 Error: Attribute `baz.qux3' was silently dropped
 |}]
+
+(* [eta_reduce] respects attributes. *)
+
+let run_eta_reduce expr =
+  match Ast_builder.Default.eta_reduce expr with
+  | None -> "No reduction"
+  | Some expr ->
+      ignore (Format.flush_str_formatter () : string);
+      Format.fprintf Format.str_formatter "reduced: %a" Pprintast.expression
+        expr;
+      Format.flush_str_formatter ()
+[%%expect{|
+
+val run_eta_reduce : expression -> string = <fun>
+|}]
+
+let basic1 = run_eta_reduce [%expr fun x y -> f x y]
+[%%expect{|
+
+val basic1 : string = "reduced: f"
+|}]
+
+let basic2 = run_eta_reduce [%expr fun x y -> (f x) y]
+[%%expect{|
+
+val basic2 : string = "reduced: f"
+|}]
+
+let attributes_block_reduction1 =
+  run_eta_reduce [%expr fun [@attr] x y -> f x y]
+[%%expect{|
+
+val attributes_block_reduction1 : string = "No reduction"
+|}]
+
+let attributes_block_reduction2 =
+  run_eta_reduce [%expr fun x y -> (f x [@attr]) y]
+[%%expect{|
+
+val attributes_block_reduction2 : string = "No reduction"
+|}]
+
+(* See the definition of eta_reduce for what attributes are considered
+ * erasable; "jane.erasable" is but a representative example. *)
+let erasable_attributes_don't_block_reduction1 =
+  run_eta_reduce [%expr fun [@jane.erasable] x y -> f x y]
+[%%expect{|
+
+val erasable_attributes_don't_block_reduction1 : string = "reduced: f"
+|}]
+
+let erasable_attributes_don't_block_reduction2 =
+  run_eta_reduce [%expr fun x y -> (f x [@jane.erasable.foo]) y]
+[%%expect{|
+
+val erasable_attributes_don't_block_reduction2 : string = "reduced: f"
+|}]
